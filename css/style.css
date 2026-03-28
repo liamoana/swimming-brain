@@ -293,6 +293,8 @@ a { color: var(--accent); text-decoration: none; }
 }
 .clear-btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--accent-border); }
 
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+
 .mobile-only { display: none; }
 
 /* --- Chat Area --- */

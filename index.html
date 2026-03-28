@@ -6,9 +6,9 @@
   <title>Swimming Brain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    // Prevent flash of wrong theme
     (function() {
       var t = localStorage.getItem('sb-theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
@@ -17,13 +17,12 @@
 </head>
 <body>
   <div class="app-wrap" id="appWrap">
-    <!-- Overlay for mobile sidebar -->
     <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 
-    <!-- LEFT SIDEBAR: Sources -->
+    <!-- LEFT SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
-        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
         </button>
         <span class="sidebar-title">Sources</span>
@@ -34,9 +33,7 @@
         Add Source
       </button>
 
-      <div class="source-list" id="sourceList">
-        <!-- Sources rendered here by JS -->
-      </div>
+      <div class="source-list" id="sourceList"></div>
 
       <div class="sidebar-footer">
         <div class="sidebar-brand">
@@ -49,23 +46,25 @@
       </div>
     </aside>
 
-    <!-- RIGHT: Main Content -->
+    <!-- RIGHT: Main -->
     <div class="main">
-      <!-- Top bar -->
       <div class="topbar">
         <button class="sidebar-toggle mobile-only" onclick="toggleSidebar()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
         </button>
         <h1 class="topbar-title">Swimming Brain</h1>
-        <button class="clear-btn" onclick="clearChat()" title="New chat">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          New Chat
-        </button>
+        <div class="topbar-actions">
+          <button class="clear-btn" onclick="showApiKeyModal()" title="API Key">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          </button>
+          <button class="clear-btn" onclick="clearChat()" title="New chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New Chat
+          </button>
+        </div>
       </div>
 
-      <!-- Chat area -->
       <div class="chat-area" id="chatArea">
-        <!-- Welcome screen -->
         <div class="welcome" id="welcome">
           <div class="welcome-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a7 7 0 0 1 7 7c0 3-2 5.5-4 7.5L12 22l-3-5.5C7 14.5 5 12 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
@@ -80,19 +79,14 @@
           </div>
         </div>
 
-        <!-- Messages container -->
         <div class="messages" id="messages"></div>
 
-        <!-- Typing indicator -->
         <div class="typing" id="typing" style="display:none">
-          <div class="typing-dots">
-            <span></span><span></span><span></span>
-          </div>
+          <div class="typing-dots"><span></span><span></span><span></span></div>
           <span>Thinking...</span>
         </div>
       </div>
 
-      <!-- Input area -->
       <div class="input-area">
         <div class="input-container">
           <div class="input-box">
@@ -116,13 +110,10 @@
         <h3>Add Source</h3>
         <button class="modal-close" onclick="hideUploadModal()">&times;</button>
       </div>
-
       <div class="modal-tabs">
         <button class="modal-tab active" data-tab="file" onclick="switchTab('file')">Upload File</button>
         <button class="modal-tab" data-tab="note" onclick="switchTab('note')">Type a Note</button>
       </div>
-
-      <!-- File Upload Tab -->
       <div class="tab-content" id="tab-file">
         <div class="dropzone" id="dropzone">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -142,13 +133,11 @@
           </div>
           <input type="text" class="title-input" id="fileTitle" placeholder="Title (optional)">
         </div>
-        <button class="upload-btn" id="uploadBtn" onclick="uploadFile()" disabled>
+        <button class="upload-btn" id="uploadBtn" onclick="processFile()" disabled>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Upload & Process
         </button>
       </div>
-
-      <!-- Note Tab -->
       <div class="tab-content" id="tab-note" style="display:none">
         <input type="text" class="title-input" id="noteTitle" placeholder="Note title (e.g., Coach backstroke tips)">
         <textarea class="note-input" id="noteContent" rows="8" placeholder="Type your notes here..."></textarea>
@@ -160,9 +149,24 @@
     </div>
   </div>
 
-  <!-- Toast container -->
+  <!-- API Key Modal -->
+  <div class="modal-overlay" id="apiKeyModal" style="display:none" onclick="hideApiKeyModal(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:400px">
+      <div class="modal-header">
+        <h3>Gemini API Key</h3>
+        <button class="modal-close" onclick="hideApiKeyModal()">&times;</button>
+      </div>
+      <div class="tab-content">
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:12px;line-height:1.5">Free key from <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>. Stored only in your browser.</p>
+        <input type="password" class="title-input" id="apiKeyInput" placeholder="AIza..." style="margin-top:0">
+        <button class="upload-btn" onclick="saveApiKey()" style="margin-top:12px">Save Key</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/js/app.js"></script>
+  <script src="js/brain.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
