@@ -98,8 +98,14 @@ a { color: var(--accent); text-decoration: none; }
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  transition: transform 0.25s ease;
+  transition: transform 0.25s ease, margin-left 0.25s ease, min-width 0.25s ease, width 0.25s ease;
   z-index: 100;
+}
+.sidebar.collapsed {
+  margin-left: calc(-1 * var(--sidebar-w));
+  min-width: 0;
+  width: 0;
+  overflow: hidden;
 }
 
 .sidebar-top {
@@ -296,7 +302,7 @@ a { color: var(--accent); text-decoration: none; }
 
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 
-.mobile-only { display: none; }
+.mobile-only { display: flex; }
 
 /* --- Chat Area --- */
 .chat-area {

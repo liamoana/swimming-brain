@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (window.innerWidth > 860) {
     const hidden = localStorage.getItem("sb-sidebar-hidden") === "true";
-    if (hidden) $("#sidebar").style.display = "none";
+    if (hidden) $("#sidebar").classList.add("collapsed");
   }
 });
 
@@ -395,9 +395,9 @@ function toggleSidebar() {
   if (window.innerWidth <= 860) {
     sidebar.classList.toggle("open");
   } else {
-    const hidden = sidebar.style.display === "none";
-    sidebar.style.display = hidden ? "" : "none";
-    localStorage.setItem("sb-sidebar-hidden", hidden ? "false" : "true");
+    sidebar.classList.toggle("collapsed");
+    const collapsed = sidebar.classList.contains("collapsed");
+    localStorage.setItem("sb-sidebar-hidden", collapsed ? "true" : "false");
   }
 }
 
