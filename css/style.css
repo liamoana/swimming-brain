@@ -305,7 +305,7 @@ a { color: var(--accent); text-decoration: none; }
 
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 
-.mobile-only { display: flex; }
+.topbar-toggle { display: flex !important; }
 
 /* --- Chat Area --- */
 .chat-area {
@@ -875,7 +875,6 @@ a { color: var(--accent); text-decoration: none; }
   }
   .sidebar.open { transform: translateX(0); }
   .sidebar.open ~ .overlay { display: block; }
-  .mobile-only { display: flex; }
   .sidebar-top .sidebar-toggle { display: none; }
   .suggestions { grid-template-columns: 1fr; }
 }
