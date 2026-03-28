@@ -1,39 +1,31 @@
 /* ===================================================================
    Swimming Brain — Brain Engine (client-side)
-   Stores sources in localStorage, searches with keyword scoring,
-   generates answers with Gemini free tier API.
+   Stores sources in localStorage, searches with BM25 ranking,
+   generates answers with extractive Q&A — no API calls.
    =================================================================== */
 
 const Brain = (() => {
   const STORAGE_KEY = "sb-sources";
   const HISTORY_KEY = "sb-history";
-  const APIKEY_KEY = "sb-gemini-key";
   const CHUNK_SIZE = 1500;
   const CHUNK_OVERLAP = 150;
 
-  const SYSTEM_PROMPT = `You are Swimming Brain, an expert AI swimming coach.
-You help swimmers improve technique, build training plans, and understand swimming science.
+  // ----- Stopwords & Tokenizer -----
+  const STOPWORDS = new Set([
+    "a","an","the","and","or","but","in","on","at","to","for","of","with",
+    "by","from","is","it","as","be","was","are","were","been","has","have",
+    "had","do","does","did","will","would","could","should","can","may",
+    "not","no","so","if","my","me","i","we","you","he","she","they","this",
+    "that","what","how","when","where","which","who","its","our","your",
+    "their","up","out","about","into","over","after","than","just","also",
+    "more","some","any","all","each","every","much","very","too","only"
+  ]);
 
-RULES:
-- Answer using the PROVIDED SOURCE CONTEXT when available
-- Cite sources with [Source: title] format after relevant statements
-- If no sources are relevant, answer from general swimming knowledge and say so
-- Be specific about body position, timing, catch mechanics, and common errors
-- For workouts, include warm-up, main set, and cool-down with intervals
-- Keep responses practical, actionable, and encouraging
-- Use proper swimming terminology (catch, pull, recovery, streamline, EVF, DPS, etc.)`;
-
-  // ----- API Key -----
-  function getApiKey() {
-    return localStorage.getItem(APIKEY_KEY) || "";
-  }
-
-  function setApiKey(key) {
-    localStorage.setItem(APIKEY_KEY, key.trim());
-  }
-
-  function hasApiKey() {
-    return !!getApiKey();
+  function tokenize(text) {
+    return text.toLowerCase()
+      .replace(/[^a-z0-9\s'-]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !STOPWORDS.has(w));
   }
 
   // ----- Source Storage (localStorage) -----
@@ -179,79 +171,216 @@ RULES:
     return source;
   }
 
-  // ----- Search (keyword scoring) -----
-  function searchSources(query, topK = 5) {
-    const sources = _loadSources();
-    if (!sources.length) return [];
-
-    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    const results = [];
+  // ----- BM25 Search Engine -----
+  function buildIndex(sources) {
+    const docs = [];
+    let totalLen = 0;
 
     for (const source of sources) {
       for (let i = 0; i < source.chunks.length; i++) {
-        const chunk = source.chunks[i];
-        const chunkLower = chunk.toLowerCase();
-        let score = 0;
-
-        for (const word of queryWords) {
-          const matches = (chunkLower.match(new RegExp(word, "g")) || []).length;
-          score += matches;
-        }
-
-        // Bonus for exact phrase match
-        if (chunkLower.includes(query.toLowerCase())) {
-          score += 10;
-        }
-
-        if (score > 0) {
-          results.push({
-            text: chunk,
-            sourceId: source.id,
-            sourceTitle: source.title,
-            score,
-            chunkIndex: i,
-          });
-        }
+        const tokens = tokenize(source.chunks[i]);
+        const tf = new Map();
+        for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);
+        docs.push({
+          tokens, tf, len: tokens.length,
+          sourceId: source.id, sourceTitle: source.title,
+          chunkIndex: i, text: source.chunks[i]
+        });
+        totalLen += tokens.length;
       }
     }
 
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, topK);
+    const avgDl = docs.length ? totalLen / docs.length : 1;
+    const df = new Map();
+    for (const doc of docs) {
+      const seen = new Set();
+      for (const t of doc.tokens) {
+        if (!seen.has(t)) { df.set(t, (df.get(t) || 0) + 1); seen.add(t); }
+      }
+    }
+
+    return { docs, avgDl, df, N: docs.length };
   }
 
-  // ----- Gemini API Call -----
-  async function callGemini(prompt) {
-    const key = getApiKey();
-    if (!key) throw new Error("No API key");
+  function searchSources(query, topK = 8) {
+    const sources = _loadSources();
+    if (!sources.length) return [];
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-        }),
+    const index = buildIndex(sources);
+    const queryTokens = tokenize(query);
+    if (!queryTokens.length) return [];
+
+    const k1 = 1.5, b = 0.75;
+    const scores = [];
+
+    for (const doc of index.docs) {
+      let score = 0;
+      for (const qt of queryTokens) {
+        const docFreq = index.df.get(qt) || 0;
+        if (docFreq === 0) continue;
+        const idf = Math.log((index.N - docFreq + 0.5) / (docFreq + 0.5) + 1);
+        const termFreq = doc.tf.get(qt) || 0;
+        const tfNorm = (termFreq * (k1 + 1)) / (termFreq + k1 * (1 - b + b * doc.len / index.avgDl));
+        score += idf * tfNorm;
       }
-    );
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Gemini API error ${res.status}`);
+      // Exact phrase bonus
+      if (doc.text.toLowerCase().includes(query.toLowerCase())) {
+        score += 5;
+      }
+
+      if (score > 0) {
+        scores.push({
+          text: doc.text,
+          sourceId: doc.sourceId,
+          sourceTitle: doc.sourceTitle,
+          score,
+          chunkIndex: doc.chunkIndex
+        });
+      }
     }
 
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.";
+    scores.sort((a, b) => b.score - a.score);
+    return scores.slice(0, topK);
+  }
+
+  // ----- Extractive Q&A Engine -----
+  function extractSentences(text) {
+    return text
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 15);
+  }
+
+  function scoreSentence(sentence, queryTokens) {
+    const sentTokens = tokenize(sentence);
+    let matches = 0;
+    for (const qt of queryTokens) {
+      if (sentTokens.includes(qt)) matches++;
+    }
+    return queryTokens.length ? matches / queryTokens.length : 0;
+  }
+
+  function extractBestSentences(chunks, query, maxSentences = 8) {
+    const queryTokens = tokenize(query);
+    const scored = [];
+
+    for (const chunk of chunks) {
+      const sentences = extractSentences(chunk.text);
+      for (const sent of sentences) {
+        scored.push({
+          sentence: sent,
+          score: scoreSentence(sent, queryTokens),
+          sourceTitle: chunk.sourceTitle,
+          sourceId: chunk.sourceId
+        });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const seen = new Set();
+    const result = [];
+    for (const s of scored) {
+      const key = s.sentence.toLowerCase().slice(0, 60);
+      if (!seen.has(key) && s.score > 0) {
+        seen.add(key);
+        result.push(s);
+      }
+      if (result.length >= maxSentences) break;
+    }
+
+    return result;
+  }
+
+  function classifyQuery(query) {
+    const q = query.toLowerCase();
+    if (/drill|exercise|practice|warm.?up|cool.?down|set\b/.test(q)) return "drill";
+    if (/workout|training plan|session|program|routine|yardage/.test(q)) return "workout";
+    if (/technique|form|body position|hand entry|catch|pull|kick|rotation|streamline|stroke|breathing/.test(q)) return "technique";
+    if (/time|pace|speed|fast|race|taper|competition|meet/.test(q)) return "racing";
+    if (/why|explain|what is|what are|define|difference|science/.test(q)) return "explanation";
+    if (/how (do|can|should)|improve|fix|correct|problem|trouble|mistake/.test(q)) return "howto";
+    if (/summary|summarize|overview|key points|main ideas/.test(q)) return "summary";
+    return "general";
+  }
+
+  function formatResponse(sentences, query, intent) {
+    if (!sentences.length) {
+      return "I couldn't find anything about that in your sources yet. Upload some swimming PDFs, coach notes, or articles and I'll be able to help!";
+    }
+
+    const bySource = new Map();
+    for (const s of sentences) {
+      if (!bySource.has(s.sourceTitle)) bySource.set(s.sourceTitle, []);
+      bySource.get(s.sourceTitle).push(s.sentence);
+    }
+
+    let response = "";
+
+    switch (intent) {
+      case "drill":
+        response = "Here are relevant drills from your sources:\n\n";
+        for (const [title, sents] of bySource) {
+          response += `**From: ${title}**\n`;
+          response += sents.map(s => `- ${s}`).join("\n") + "\n\n";
+        }
+        break;
+
+      case "workout":
+        response = "Here's what your sources say about workouts and training:\n\n";
+        for (const [title, sents] of bySource) {
+          response += `**From: ${title}**\n`;
+          response += sents.join(" ") + "\n\n";
+        }
+        break;
+
+      case "technique":
+        response = "Here's what your sources say about technique:\n\n";
+        for (const [title, sents] of bySource) {
+          response += `**${title}:** `;
+          response += sents.join(" ") + "\n\n";
+        }
+        break;
+
+      case "howto":
+        response = "Here's what your sources suggest:\n\n";
+        for (const [title, sents] of bySource) {
+          response += `**From: ${title}**\n`;
+          response += sents.map((s, i) => `${i + 1}. ${s}`).join("\n") + "\n\n";
+        }
+        break;
+
+      case "explanation":
+        response = "Based on your sources:\n\n";
+        for (const [title, sents] of bySource) {
+          response += sents.map(s => `${s} [Source: ${title}]`).join(" ") + "\n\n";
+        }
+        break;
+
+      case "summary":
+        response = "Here's a summary from your sources:\n\n";
+        for (const [title, sents] of bySource) {
+          response += `**${title}**\n`;
+          response += sents.join(" ") + "\n\n";
+        }
+        break;
+
+      default:
+        response = "Here's what I found in your sources:\n\n";
+        for (const [title, sents] of bySource) {
+          response += `**From: ${title}**\n`;
+          response += sents.join(" ") + "\n\n";
+        }
+    }
+
+    return response.trim();
   }
 
   // ----- Main Ask Function -----
-  async function ask(query) {
-    const context = searchSources(query);
-    const history = getHistory();
+  function ask(query) {
+    const context = searchSources(query, 8);
 
-    // Build citations list
     const seen = new Set();
     const citations = [];
     for (const c of context) {
@@ -261,71 +390,128 @@ RULES:
       }
     }
 
-    // Try Gemini AI
-    if (hasApiKey()) {
-      try {
-        let prompt = "";
+    const intent = classifyQuery(query);
+    const sentences = extractBestSentences(context, query);
+    const response = formatResponse(sentences, query, intent);
 
-        if (context.length) {
-          const contextText = context.map(c =>
-            `[Source: ${c.sourceTitle}]\n${c.text}`
-          ).join("\n\n");
-          prompt += `SOURCES:\n${contextText}\n\n`;
-        } else {
-          prompt += "No uploaded sources match this question. Answer from general swimming knowledge.\n\n";
-        }
-
-        // Recent history
-        const recent = history.slice(-6);
-        if (recent.length) {
-          prompt += "RECENT CONVERSATION:\n";
-          prompt += recent.map(m =>
-            `${m.role === "user" ? "User" : "Assistant"}: ${m.text.slice(0, 500)}`
-          ).join("\n") + "\n\n";
-        }
-
-        prompt += `User question: ${query}`;
-
-        const response = await callGemini(prompt);
-
-        saveMessage("user", query);
-        saveMessage("assistant", response, citations);
-
-        return { response, citations, chunksUsed: context.length };
-      } catch (e) {
-        console.error("Gemini error:", e);
-        // Fall through to offline mode
-      }
-    }
-
-    // Offline fallback — return raw passages
     saveMessage("user", query);
-
-    if (!context.length) {
-      const msg = hasApiKey()
-        ? "Gemini API error. Check your API key in settings."
-        : "Add a Gemini API key (click the key icon) for AI answers, or upload sources to search.";
-      saveMessage("assistant", msg, []);
-      return { response: msg, citations: [], chunksUsed: 0 };
-    }
-
-    const parts = [`Here's what I found in your sources:\n`];
-    for (const c of context) {
-      let text = c.text.trim();
-      if (text.length > 600) text = text.slice(0, 600).replace(/\s\S*$/, "") + "...";
-      parts.push(`**From: ${c.sourceTitle}**\n${text}\n`);
-    }
-
-    const response = parts.join("\n");
     saveMessage("assistant", response, citations);
+
     return { response, citations, chunksUsed: context.length };
   }
 
+  // ----- Source Analysis (NotebookLM-like) -----
+  function extractTopics(source, maxTopics = 8) {
+    const allText = source.chunks.join(" ");
+    const tokens = tokenize(allText);
+    const tf = new Map();
+    for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);
+
+    const sorted = [...tf.entries()]
+      .filter(([term]) => term.length > 3)
+      .sort((a, b) => b[1] - a[1]);
+
+    return sorted.slice(0, maxTopics).map(([term, count]) => ({ term, count }));
+  }
+
+  function generateSourceSummary(source) {
+    const allSentences = [];
+    for (const chunk of source.chunks) {
+      const sents = extractSentences(chunk);
+      if (sents.length) allSentences.push(...sents);
+    }
+
+    if (!allSentences.length) return "No extractable content.";
+
+    const topics = extractTopics(source, 10);
+    const topicTerms = topics.map(t => t.term);
+
+    const scored = allSentences.map(sent => {
+      const tokens = tokenize(sent);
+      const topicHits = topicTerms.filter(t => tokens.includes(t)).length;
+      return { sent, score: topicHits };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const used = new Set();
+    const summary = [];
+    for (const s of scored) {
+      const key = s.sent.slice(0, 50);
+      if (!used.has(key)) {
+        used.add(key);
+        summary.push(s.sent);
+      }
+      if (summary.length >= 4) break;
+    }
+
+    return summary.join(" ");
+  }
+
+  function getSourceOverview(sourceId) {
+    const sources = _loadSources();
+    const source = sources.find(s => s.id === sourceId);
+    if (!source) return null;
+
+    const allText = source.chunks.join(" ");
+    const wordCount = allText.split(/\s+/).length;
+    const topics = extractTopics(source);
+    const summary = generateSourceSummary(source);
+
+    return {
+      id: source.id,
+      title: source.title,
+      type: source.type,
+      chunkCount: source.chunkCount,
+      wordCount,
+      topics,
+      summary,
+      uploadedAt: source.uploadedAt
+    };
+  }
+
+  function generateStudyGuide() {
+    const sources = _loadSources();
+    if (!sources.length) return null;
+
+    const guide = {
+      sourceCount: sources.length,
+      sections: []
+    };
+
+    for (const source of sources) {
+      const overview = getSourceOverview(source.id);
+      const allSentences = [];
+      for (const chunk of source.chunks) {
+        allSentences.push(...extractSentences(chunk));
+      }
+
+      const keyFacts = allSentences.filter(s =>
+        /\d/.test(s) || /focus|important|key|remember|always|never|tip|note/i.test(s)
+      ).slice(0, 5);
+
+      const faqSentences = allSentences.filter(s =>
+        /should|can|will|helps?|improve|try|practice|make sure/i.test(s)
+      ).slice(0, 3);
+
+      guide.sections.push({
+        title: source.title,
+        topics: overview.topics,
+        summary: overview.summary,
+        keyFacts,
+        faqEntries: faqSentences
+      });
+    }
+
+    return guide;
+  }
+
   return {
-    getApiKey, setApiKey, hasApiKey,
     getAllSources, deleteSource,
     processFile, processNote,
     getHistory, clearHistory,
-    ask,
+    searchSources, ask,
+    getSourceOverview, extractTopics,
+    generateSourceSummary, generateStudyGuide,
   };
 })();

@@ -1,5 +1,5 @@
 /* ===================================================================
-   Swimming Brain — UI Logic (static, no server)
+   Swimming Brain — UI Logic (static, no server, no API)
    =================================================================== */
 
 let sending = false;
@@ -32,11 +32,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const hidden = localStorage.getItem("sb-sidebar-hidden") === "true";
     if (hidden) $("#sidebar").style.display = "none";
   }
-
-  // Show API key prompt if not set
-  if (!Brain.hasApiKey()) {
-    setTimeout(() => showToast("Add a Gemini API key (key icon) for AI answers", "success"), 1000);
-  }
 });
 
 // ===================================================================
@@ -61,13 +56,13 @@ function renderSourceList(sources) {
     const icon = s.type === "pdf" ? "PDF" : s.type === "note" ? "NOTE" : "TXT";
     const date = new Date(s.uploadedAt).toLocaleDateString();
     return `
-      <div class="source-item" data-id="${esc(s.id)}">
+      <div class="source-item" data-id="${esc(s.id)}" onclick="showSourceOverview('${esc(s.id)}')">
         <div class="source-icon ${esc(s.type)}">${icon}</div>
         <div class="source-info">
           <div class="source-name" title="${esc(s.title)}">${esc(s.title)}</div>
           <div class="source-meta">${s.chunkCount} chunks &middot; ${date}</div>
         </div>
-        <button class="source-delete" onclick="deleteSource('${esc(s.id)}')" title="Delete">
+        <button class="source-delete" onclick="event.stopPropagation(); deleteSource('${esc(s.id)}')" title="Delete">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>`;
@@ -79,6 +74,97 @@ function deleteSource(id) {
   Brain.deleteSource(id);
   loadSources();
   showToast("Source deleted", "success");
+}
+
+// ===================================================================
+// SOURCE OVERVIEW
+// ===================================================================
+
+function showSourceOverview(sourceId) {
+  const overview = Brain.getSourceOverview(sourceId);
+  if (!overview) return;
+
+  const topicsHtml = overview.topics
+    .map(t => `<span class="topic-tag">${esc(t.term)}</span>`)
+    .join("");
+
+  $("#overviewBody").innerHTML = `
+    <h4 class="overview-title">${esc(overview.title)}</h4>
+    <div class="overview-stats">
+      <span>${overview.wordCount.toLocaleString()} words</span>
+      <span>${overview.chunkCount} chunks</span>
+      <span>${overview.type.toUpperCase()}</span>
+    </div>
+    <div class="overview-section">
+      <h5>Key Topics</h5>
+      <div class="topics-list">${topicsHtml || '<span class="no-data">No topics extracted</span>'}</div>
+    </div>
+    <div class="overview-section">
+      <h5>Summary</h5>
+      <p>${esc(overview.summary)}</p>
+    </div>
+  `;
+
+  $("#sourceList").style.display = "none";
+  $(".add-source-btn").style.display = "none";
+  $("#sourceOverview").style.display = "block";
+}
+
+function hideSourceOverview() {
+  $("#sourceOverview").style.display = "none";
+  $("#sourceList").style.display = "";
+  $(".add-source-btn").style.display = "";
+}
+
+// ===================================================================
+// STUDY GUIDE
+// ===================================================================
+
+function showStudyGuide() {
+  const guide = Brain.generateStudyGuide();
+  if (!guide || !guide.sections.length) {
+    showToast("Upload some sources first to generate a study guide", "error");
+    return;
+  }
+
+  let html = `<div class="study-guide-body">`;
+  html += `<p class="study-guide-intro">${guide.sourceCount} source${guide.sourceCount > 1 ? "s" : ""} analyzed</p>`;
+
+  for (const section of guide.sections) {
+    html += `<div class="study-section">`;
+    html += `<h4>${esc(section.title)}</h4>`;
+    html += `<p class="study-summary">${esc(section.summary)}</p>`;
+
+    if (section.topics.length) {
+      html += `<div class="study-topics">`;
+      html += section.topics.map(t => `<span class="topic-tag">${esc(t.term)}</span>`).join("");
+      html += `</div>`;
+    }
+
+    if (section.keyFacts.length) {
+      html += `<h5>Key Facts</h5><ul>`;
+      html += section.keyFacts.map(f => `<li>${esc(f)}</li>`).join("");
+      html += `</ul>`;
+    }
+
+    if (section.faqEntries.length) {
+      html += `<h5>Things to Practice</h5><ul>`;
+      html += section.faqEntries.map(f => `<li>${esc(f)}</li>`).join("");
+      html += `</ul>`;
+    }
+
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+
+  $("#studyGuideContent").innerHTML = html;
+  $("#studyGuideModal").style.display = "flex";
+}
+
+function hideStudyGuide(e) {
+  if (e && e.target !== $("#studyGuideModal")) return;
+  $("#studyGuideModal").style.display = "none";
 }
 
 // ===================================================================
@@ -183,31 +269,10 @@ function setupDragDrop() {
 }
 
 // ===================================================================
-// API KEY MODAL
-// ===================================================================
-
-function showApiKeyModal() {
-  $("#apiKeyModal").style.display = "flex";
-  $("#apiKeyInput").value = Brain.getApiKey();
-}
-
-function hideApiKeyModal(e) {
-  if (e && e.target !== $("#apiKeyModal")) return;
-  $("#apiKeyModal").style.display = "none";
-}
-
-function saveApiKey() {
-  const key = $("#apiKeyInput").value.trim();
-  Brain.setApiKey(key);
-  hideApiKeyModal();
-  showToast(key ? "API key saved" : "API key removed", "success");
-}
-
-// ===================================================================
 // CHAT
 // ===================================================================
 
-async function send() {
+function send() {
   const text = inp.value.trim();
   if (!text || sending) return;
 
@@ -220,17 +285,20 @@ async function send() {
   addMsg(text, "user");
   showTyping();
 
-  try {
-    const data = await Brain.ask(text);
-    hideTyping();
-    addMsg(data.response, "bot", data.citations);
-  } catch (e) {
-    hideTyping();
-    addMsg("Something went wrong. " + (e.message || ""), "bot");
-  } finally {
-    sending = false;
-    sendBtn.disabled = !inp.value.trim();
-  }
+  // Small delay so typing indicator is visible (extraction is instant)
+  setTimeout(() => {
+    try {
+      const data = Brain.ask(text);
+      hideTyping();
+      addMsg(data.response, "bot", data.citations);
+    } catch (e) {
+      hideTyping();
+      addMsg("Something went wrong. " + (e.message || ""), "bot");
+    } finally {
+      sending = false;
+      sendBtn.disabled = !inp.value.trim();
+    }
+  }, 300);
 }
 
 function handleKey(e) {
