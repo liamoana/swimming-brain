@@ -1,56 +1,56 @@
 /* ===================================================================
    Swimming Brain — Styles
-   Dark-first theme with teal accent, matching SwimCoach design
+   Light-first theme with teal accent, matching SwimCoach design
    =================================================================== */
 
 /* --- Theme Variables --- */
 :root,
+[data-theme="light"] {
+  --bg: #f0f2f5;
+  --bg-2: #ffffff;
+  --bg-3: #f5f7fa;
+  --bg-card: #ffffff;
+  --bg-hover: rgba(16, 185, 129, 0.06);
+  --border: #e5e7eb;
+  --border-2: #d1d5db;
+  --text: #1f2937;
+  --text-2: #6b7280;
+  --text-3: #9ca3af;
+  --accent: #10b981;
+  --accent-2: #059669;
+  --accent-bg: rgba(16, 185, 129, 0.08);
+  --accent-border: rgba(16, 185, 129, 0.25);
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.08);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+  --r: 12px;
+  --r-sm: 8px;
+  --r-lg: 16px;
+  --sidebar-w: 260px;
+  --topbar-h: 56px;
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
 [data-theme="dark"] {
   --bg: #0c1017;
   --bg-2: #141a24;
   --bg-3: #1a2230;
   --bg-card: rgba(20, 26, 36, 0.85);
-  --bg-hover: rgba(20, 163, 166, 0.08);
+  --bg-hover: rgba(16, 185, 129, 0.08);
   --border: rgba(255, 255, 255, 0.06);
   --border-2: rgba(255, 255, 255, 0.1);
   --text: #e8ecf1;
   --text-2: #8b95a5;
   --text-3: #5a6478;
-  --accent: #14b8a6;
-  --accent-2: #0d9488;
-  --accent-bg: rgba(20, 184, 166, 0.1);
-  --accent-border: rgba(20, 184, 166, 0.25);
+  --accent: #10b981;
+  --accent-2: #34d399;
+  --accent-bg: rgba(16, 185, 129, 0.1);
+  --accent-border: rgba(16, 185, 129, 0.25);
   --red: #ef4444;
   --red-bg: rgba(239, 68, 68, 0.1);
   --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --r: 10px;
-  --r-sm: 6px;
-  --r-lg: 16px;
-  --sidebar-w: 280px;
-  --topbar-h: 56px;
-  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-[data-theme="light"] {
-  --bg: #f5f7fa;
-  --bg-2: #ffffff;
-  --bg-3: #edf0f5;
-  --bg-card: rgba(255, 255, 255, 0.9);
-  --bg-hover: rgba(20, 163, 166, 0.06);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-2: rgba(0, 0, 0, 0.12);
-  --text: #1a2230;
-  --text-2: #5a6478;
-  --text-3: #8b95a5;
-  --accent: #0d9488;
-  --accent-2: #14b8a6;
-  --accent-bg: rgba(13, 148, 136, 0.08);
-  --accent-border: rgba(13, 148, 136, 0.2);
-  --red: #dc2626;
-  --red-bg: rgba(220, 38, 38, 0.08);
-  --shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 /* --- Reset & Base --- */
@@ -137,18 +137,18 @@ a { color: var(--accent); text-decoration: none; }
   gap: 8px;
   margin: 12px 14px;
   padding: 10px;
-  background: var(--accent-bg);
-  border: 1px dashed var(--accent-border);
+  background: var(--accent);
+  border: none;
   border-radius: var(--r);
-  color: var(--accent);
+  color: white;
   font-weight: 600;
   font-size: 14px;
   transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 .add-source-btn:hover {
-  background: var(--accent);
-  color: white;
-  border-style: solid;
+  background: var(--accent-2);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .source-list {
@@ -269,14 +269,15 @@ a { color: var(--accent); text-decoration: none; }
   align-items: center;
   gap: 12px;
   padding: 0 20px;
+  background: var(--bg-2);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .topbar-title {
   flex: 1;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .clear-btn {
@@ -356,17 +357,20 @@ a { color: var(--accent); text-decoration: none; }
 .suggestion {
   padding: 14px 16px;
   background: var(--bg-2);
-  border: 1px solid var(--border-2);
+  border: 1px solid var(--border);
   border-radius: var(--r);
   font-size: 13px;
   text-align: left;
   color: var(--text);
   transition: all 0.15s;
   line-height: 1.4;
+  box-shadow: var(--shadow);
 }
 .suggestion:hover {
-  border-color: var(--accent-border);
+  border-color: var(--accent);
   background: var(--accent-bg);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
 }
 
 /* --- Messages --- */
@@ -424,6 +428,7 @@ a { color: var(--accent); text-decoration: none; }
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+  box-shadow: var(--shadow);
 }
 
 .msg-row.bot .msg-text p { margin-bottom: 10px; }
@@ -505,12 +510,13 @@ a { color: var(--accent); text-decoration: none; }
   align-items: flex-end;
   gap: 8px;
   background: var(--bg-2);
-  border: 1px solid var(--border-2);
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 8px 12px;
-  transition: border-color 0.15s;
+  transition: all 0.15s;
+  box-shadow: var(--shadow);
 }
-.input-box:focus-within { border-color: var(--accent-border); }
+.input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
 
 .input-box textarea {
   flex: 1;
